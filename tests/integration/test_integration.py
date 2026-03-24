@@ -19,17 +19,15 @@ def test_pochi_integration_success():
         shutil.rmtree(trajectory_dir)
 
     verifier = PochiVerifier()
-    spec = {
-        "name": "integration_test_blank_page",
-        "type": "browser_verification",
-        "reason": "To confirm the integration with the real pochi CLI works.",
-        "verification": "Go to 'about:blank' and verify that the page title is an empty string."
-    }
+    
+    reason = "To confirm the integration with the real pochi CLI works."
+    truth = "Go to 'about:blank' and verify that the page title is an empty string."
 
     # This call will execute the actual 'pochi' command.
     # It may be slow and requires proper configuration (e.g., API keys).
     result = verifier.verify(
-        spec,
+        reason=reason,
+        truth=truth,
         trajectory_dir=trajectory_dir
     )
 

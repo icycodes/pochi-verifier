@@ -30,13 +30,14 @@ class PochiVerifier:
     A Python wrapper for the pochi CLI.
     """
 
-    def __init__(self, pochi_path: str = "pochi"):
+    def __init__(self, pochi_path: str = "pochi", ffmpeg_path: Optional[str] = None):
         """
         Initializes the PochiVerifier.
 
         Args:
             pochi_path (str): The path to the pochi executable. 
                                 Defaults to "pochi", assuming it's in the system's PATH.
+            ffmpeg_path (Optional[str]): The path to the ffmpeg executable.
         """
         if not shutil.which(pochi_path):
             raise FileNotFoundError(
@@ -45,10 +46,36 @@ class PochiVerifier:
                 "is in your system's PATH, or provide the correct path to it."
             )
         self.pochi_path = pochi_path
+        self.ffmpeg_path = ffmpeg_path
+        if self.ffmpeg_path:
+            if not shutil.which(self.ffmpeg_path):
+                print("Warning: ffmpeg not found at the specified path. Video recording will not be available.")
+        elif not shutil.which("ffmpeg"):
+            print("Warning: ffmpeg not found in PATH. Video recording will not be available.")
+
+        self._has_browser_agent = self._check_browser_agent()
+        if not self._has_browser_agent:
+            print("Warning: 'agent-browser' not found. Browser verification will not be available.")
+
+    def _check_browser_agent(self) -> bool:
+        """Checks if the browser agent is available."""
+        try:
+            subprocess.run(
+                [self.pochi_path, "agent-browser", "--version"],
+                capture_output=True,
+                text=True,
+                check=True,
+                encoding='utf-8'
+            )
+            return True
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return False
 
     def verify(
-        self, 
-        spec: Dict[str, Any], 
+        self,
+        reason: str,
+        truth: str,
+        use_browser_agent: bool = True,
         model: str = "google/gemini-3-flash",
         trajectory_dir: Optional[str] = None,
     ) -> VerificationResult:
@@ -56,13 +83,10 @@ class PochiVerifier:
         Runs the pochi CLI's verify command with the given specification.
 
         Args:
-            spec (Dict[str, Any]): A dictionary containing the verification specification.
-                                 It should contain the following keys:
-                                 - 'name' (str): The name of the test case.
-                                 - 'type' (str): The type of verification. Currently only
-                                   'browser_verification' is supported.
-                                 - 'reason' (str): The reason for this verification.
-                                 - 'verification' (str): The steps to perform for the verification.
+            reason (str): The reason for this verification.
+            truth (str): The steps to perform for the verification.
+            use_browser_agent (bool): Whether to use the browser agent for verification.
+                Only use_browser_agent = True is supported for now.
             model (str): The model to use for the verification.
             trajectory_dir (Optional[str]): The directory to save trajectory files.
                                 If None, a default directory will be created.
@@ -77,25 +101,19 @@ class PochiVerifier:
             PochiOutputError: If the output from pochi CLI is malformed.
             FileNotFoundError: If the pochi executable is not found.
         """
-        if "type" not in spec or spec["type"] != "browser_verification":
-            raise ValueError("Currently, only 'browser_verification' is supported for the 'type' field.")
 
-        if "name" not in spec or not spec["name"]:
-            raise ValueError("The 'name' field is missing or empty in the spec.")
-        
-        if "reason" not in spec or not spec["reason"]:
-            raise ValueError("The 'reason' field is missing or empty in the spec.")
+        if not use_browser_agent:
+            raise ValueError("Only use_browser_agent = True is supported for now.")
 
-        if "verification" not in spec or not spec["verification"]:
-            raise ValueError("The 'verification' field is missing or empty in the spec.")
+        if use_browser_agent and not self._has_browser_agent:
+            raise ValueError("Browser agent is not available. Please install 'agent-browser' for pochi.")
 
-        prompt = self._create_prompt(spec)
+        prompt = self._create_prompt(reason, truth)
         
         if trajectory_dir is None:
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
             pid = os.getpid()
-            safe_name = "".join(c if c.isalnum() else "_" for c in spec["name"])
-            trajectory_dir = os.path.join(os.getcwd(), "pochi-verifier", "trajectories", f"{safe_name}-{timestamp}-{pid}")
+            trajectory_dir = os.path.join(os.getcwd(), "pochi-verifier", "trajectories", f"{timestamp}-{pid}")
         
         os.makedirs(trajectory_dir, exist_ok=True)
 
@@ -113,6 +131,9 @@ class PochiVerifier:
             "--blobs-dir", blobs_dir_path,
             "--prompt", prompt,
         ]
+        
+        if self.ffmpeg_path:
+            command.extend(["--ffmpeg", self.ffmpeg_path])
 
         try:
             result = subprocess.run(
@@ -170,10 +191,8 @@ class PochiVerifier:
         except json.JSONDecodeError as e:
             raise PochiOutputError(f"Failed to parse JSON from pochi output: {e}") from e
 
-    def _create_prompt(self, spec: Dict[str, Any]) -> str:
+    def _create_prompt(self, reason: str, truth: str) -> str:
         """Creates the prompt for the pochi CLI for browser verification."""
-        reason = spec.get("reason", "No reason provided.")
-        verification = spec.get("verification")
         
         return f"""You are a software tester. Your task is to use the browser agent to verify the following test case.
 
@@ -181,7 +200,7 @@ Reason for this test:
 {reason}
 
 Verification Steps:
-{verification}
+{truth}
 
 Important: If the target URL in the verification steps cannot be opened, you must immediately return a "fail" status.
 
