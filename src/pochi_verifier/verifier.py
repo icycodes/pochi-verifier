@@ -192,45 +192,49 @@ class PochiVerifier:
 
     def _parse_result(self, stdout: str, stderr: str) -> VerificationResult:
         """Parses the stdout from pochi to extract the verification result."""
+        # Find the JSON object that follows the `Task Completed` marker (with possible whitespace)
+        match = re.search(r"Task Completed\s*\n*\s*(\{[\s\S]*?\})", stdout)
+        if not match:
+            raise PochiOutputError("Cannot extract the JSON from the output message.")
+        json_str = match.group(1)
         try:
-            # Find the JSON object that follows "Task Completed"
-            match = re.search(r"Task Completed.*?(\{.*)", stdout, re.DOTALL)
-            if not match:
-                raise PochiOutputError("Could not find 'Task Completed' marker in the output.")
-            
-            json_str = match.group(1)
             parsed_json = json.loads(json_str)
-
-            status = parsed_json.get("status")
-            reason = parsed_json.get("reason")
-
-            if not status or not reason:
-                raise PochiOutputError("The result JSON is missing 'status' or 'reason'.")
-
-            if status == "fail":
-                raise VerificationFailedError(f"Verification failed: {reason}")
-
-            return VerificationResult(status=status, reason=reason, stdout=stdout, stderr=stderr)
-
         except json.JSONDecodeError as e:
             raise PochiOutputError(f"Failed to parse JSON from pochi output: {e}") from e
+
+        status = parsed_json.get("status")
+        reason = parsed_json.get("reason")
+
+        if not status or not reason:
+            raise PochiOutputError("The result JSON is missing 'status' or 'reason'.")
+
+        if status == "fail":
+            raise VerificationFailedError(f"Verification failed: {reason}")
+
+        return VerificationResult(status=status, reason=reason, stdout=stdout, stderr=stderr)
 
     def _create_prompt(self, reason: str, truth: str) -> str:
         """Creates the prompt for the pochi CLI for browser verification."""
         
-        return f"""You are a software tester. Your task is to use the browser agent to verify the following test case.
+        return f"""You are a software tester assigned to verify a test case using the "browser" agent.
 
-Reason for this test:
+## Critical Instructions
+- You **must** use the "browser" agent to perform all verification steps.  
+- **Do NOT** attempt to start new processes or execute commands to open ports. If the verification steps reference a URL or port that cannot be accessed, immediately return a `"fail"` status.
+- If you encounter any verification step that you cannot execute, or are unsure how to proceed at any point, immediately return a `"fail"` status.  
+  - For example: If you see a login page but no login step exists in the instructions, stop and return `"fail"`.
+
+## Reason for this test
 {reason}
 
-Verification Steps:
+## Verification Steps
+Follow these steps precisely and in order:
 {truth}
 
-Important: If the target URL in the verification steps cannot be opened, you must immediately return a "fail" status.
-
-Complete this task and provide the result in the following JSON format:
+## Result Format
+At the end of the test, respond with the following JSON:
 {{
-  "status": "pass" | "fail",
-  "reason": "A detailed explanation of why the test passed or failed."
+    "status": "pass" | "fail",
+    "reason": "A detailed explanation describing why the test passed or failed."
 }}
 """

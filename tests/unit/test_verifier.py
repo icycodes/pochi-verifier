@@ -52,6 +52,22 @@ def test_verify_success(verifier, valid_reason, valid_truth, tmp_path):
         assert "--stream-json" in command
         assert "--prompt" in command
 
+def test_verify_success_with_suffix_output(verifier, valid_reason, valid_truth, tmp_path):
+    """Test a successful verification."""
+    mock_stdout = io.StringIO(
+        "Some output...\n\n🎉 Task Completed\n{\n  \"status\": \"pass\",\n  \"reason\": \"Test passed with suffix.\"\n}\nMore output..."
+    )
+    mock_process = MagicMock()
+    mock_process.stdout = mock_stdout
+    mock_process.stderr = io.StringIO("")
+    mock_process.poll.side_effect = [None, 0]
+    mock_process.wait.return_value = 0
+    mock_process.returncode = 0
+    with patch('subprocess.Popen', return_value=mock_process):
+        result = verifier.verify(valid_reason, valid_truth, trajectory_dir=str(tmp_path))
+        assert result.status == "pass"
+        assert result.reason == "Test passed with suffix."
+
 def test_verify_failure_status(verifier, valid_reason, valid_truth, tmp_path):
     """Test a verification that returns a 'fail' status."""
     mock_stdout = io.StringIO(
@@ -109,7 +125,7 @@ def test_malformed_json_output(verifier, valid_reason, valid_truth, tmp_path):
     mock_process.returncode = 0
 
     with patch('subprocess.Popen', return_value=mock_process):
-        with pytest.raises(PochiOutputError, match="Failed to parse JSON from pochi output"):
+        with pytest.raises(PochiOutputError, match="Cannot extract the JSON from the output message."):
             verifier.verify(valid_reason, valid_truth, trajectory_dir=str(tmp_path))
 
 def test_missing_task_completed_marker(verifier, valid_reason, valid_truth, tmp_path):
@@ -126,7 +142,7 @@ def test_missing_task_completed_marker(verifier, valid_reason, valid_truth, tmp_
     mock_process.returncode = 0
 
     with patch('subprocess.Popen', return_value=mock_process):
-        with pytest.raises(PochiOutputError, match="Could not find 'Task Completed' marker in the output."):
+        with pytest.raises(PochiOutputError, match="Cannot extract the JSON from the output message."):
             verifier.verify(valid_reason, valid_truth, trajectory_dir=str(tmp_path))
 
 def test_default_trajectory_dir_creation(verifier, valid_reason, valid_truth, tmp_path):
