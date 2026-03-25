@@ -123,6 +123,7 @@ class PochiVerifier:
         stdout_file_path = os.path.join(trajectory_dir, "stdout.txt")
         stderr_file_path = os.path.join(trajectory_dir, "stderr.txt")
 
+        # Compose the command as a list for subprocess
         command = [
             self.pochi_path,
             "--model", model,
@@ -131,25 +132,54 @@ class PochiVerifier:
             "--blobs-dir", blobs_dir_path,
             "--prompt", prompt,
         ]
-        
         if self.ffmpeg_path:
             command.extend(["--ffmpeg", self.ffmpeg_path])
 
         try:
-            result = subprocess.run(
-                command,
-                capture_output=True,
-                text=True,
-                check=True,
-                encoding='utf-8'
-            )
-            with open(stdout_file_path, "w", encoding='utf-8') as f:
-                f.write(result.stdout)
-            if result.stderr:
-                with open(stderr_file_path, "w", encoding='utf-8') as f:
-                    f.write(result.stderr)
-            
-            return self._parse_result(result.stdout, result.stderr)
+            with open(stdout_file_path, "w", encoding="utf-8") as fout, \
+                 open(stderr_file_path, "w", encoding="utf-8") as ferr:
+                process = subprocess.Popen(
+                    command,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    encoding="utf-8"
+                )
+                stdout_chunks = []
+                stderr_chunks = []
+                # Read and write output in real time
+                while True:
+                    out = process.stdout.readline() if process.stdout else ''
+                    err = process.stderr.readline() if process.stderr else ''
+                    if out:
+                        fout.write(out)
+                        fout.flush()
+                        stdout_chunks.append(out)
+                    if err:
+                        ferr.write(err)
+                        ferr.flush()
+                        stderr_chunks.append(err)
+                    if not out and not err and process.poll() is not None:
+                        break
+                # Read any remaining output
+                if process.stdout:
+                    for out in process.stdout:
+                        fout.write(out)
+                        fout.flush()
+                        stdout_chunks.append(out)
+                if process.stderr:
+                    for err in process.stderr:
+                        ferr.write(err)
+                        ferr.flush()
+                        stderr_chunks.append(err)
+                process.wait()
+                if process.returncode != 0:
+                    raise subprocess.CalledProcessError(
+                        process.returncode, command, output=''.join(stdout_chunks), stderr=''.join(stderr_chunks)
+                    )
+                stdout_content = ''.join(stdout_chunks)
+                stderr_content = ''.join(stderr_chunks)
+                return self._parse_result(stdout_content, stderr_content)
 
         except FileNotFoundError:
             raise FileNotFoundError(
@@ -158,13 +188,7 @@ class PochiVerifier:
                 "is in your system's PATH, or provide the correct path to it."
             )
         except subprocess.CalledProcessError as e:
-            with open(stdout_file_path, "w", encoding='utf-8') as f:
-                f.write(e.stdout)
-            with open(stderr_file_path, "w", encoding='utf-8') as f:
-                f.write(e.stderr)
-            raise subprocess.CalledProcessError(
-                e.returncode, e.cmd, output=e.output, stderr=e.stderr
-            ) from e
+            raise e
 
     def _parse_result(self, stdout: str, stderr: str) -> VerificationResult:
         """Parses the stdout from pochi to extract the verification result."""
