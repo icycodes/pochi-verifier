@@ -128,7 +128,7 @@ class PochiVerifier:
             self.pochi_path,
             "--model", model,
             "--attempt-completion-schema", schema,
-            "--stream-json", stream_json_path,
+            "--experimental-stream-trajectory", stream_json_path,
             "--blobs-dir", blobs_dir_path,
             "--prompt", prompt,
         ]
@@ -193,10 +193,31 @@ class PochiVerifier:
     def _parse_result(self, stdout: str, stderr: str) -> VerificationResult:
         """Parses the stdout from pochi to extract the verification result."""
         # Find the JSON object that follows the `Task Completed` marker (with possible whitespace)
-        match = re.search(r"Task Completed\s*\n*\s*(\{[\s\S]*?\})", stdout)
+        match = re.search(r"Task Completed.*?(\{.*)", stdout, re.DOTALL)
         if not match:
             raise PochiOutputError("Cannot extract the JSON from the output message.")
         json_str = match.group(1)
+        # Extract the full JSON object, accounting for nested/escaped braces
+        brace_count = 0
+        in_string = False
+        escape = False
+        for i, c in enumerate(json_str):
+            if escape:
+                escape = False
+                continue
+            if c == '\\':
+                escape = True
+                continue
+            if c == '"':
+                in_string = not in_string
+            if not in_string:
+                if c == '{':
+                    brace_count += 1
+                elif c == '}':
+                    brace_count -= 1
+                    if brace_count == 0:
+                        json_str = json_str[:i+1]
+                        break
         try:
             parsed_json = json.loads(json_str)
         except json.JSONDecodeError as e:
