@@ -137,7 +137,6 @@ class PochiVerifier:
         )
 
         try:
-            print("shell_command", shell_command)
             proc = subprocess.run(
                 shell_command,
                 shell=True,
