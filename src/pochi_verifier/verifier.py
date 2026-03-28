@@ -33,11 +33,6 @@ class PochiVerifier:
     def __init__(self, pochi_path: str = "pochi", ffmpeg_path: Optional[str] = None):
         """
         Initializes the PochiVerifier.
-
-        Args:
-            pochi_path (str): The path to the pochi executable. 
-                                Defaults to "pochi", assuming it's in the system's PATH.
-            ffmpeg_path (Optional[str]): The path to the ffmpeg executable.
         """
         if not shutil.which(pochi_path):
             raise FileNotFoundError(
@@ -123,63 +118,36 @@ class PochiVerifier:
         stdout_file_path = os.path.join(trajectory_dir, "stdout.txt")
         stderr_file_path = os.path.join(trajectory_dir, "stderr.txt")
 
-        # Compose the command as a list for subprocess
-        command = [
-            self.pochi_path,
-            "--model", model,
-            "--attempt-completion-schema", schema,
-            "--experimental-stream-trajectory", stream_json_path,
-            "--blobs-dir", blobs_dir_path,
-            "--prompt", prompt,
-        ]
+        # Compose the full shell command as a string
+        shell_command = (
+            f"{self.pochi_path} "
+            f"--model {model} "
+            f"--attempt-completion-schema '{schema}' "
+            f"--experimental-stream-trajectory {stream_json_path} "
+            f"--blobs-dir {blobs_dir_path} "
+        )
         if self.ffmpeg_path:
-            command.extend(["--ffmpeg", self.ffmpeg_path])
+            shell_command += f"--ffmpeg {self.ffmpeg_path} "
+        shell_command += (
+            f"> >(tee {stdout_file_path}) "
+            f"2> >(tee {stderr_file_path} >&2) "
+            "<<'EOF'\n"
+            f"{prompt}\n"
+            "EOF"
+        )
 
         try:
-            with open(stdout_file_path, "w", encoding="utf-8") as fout, \
-                 open(stderr_file_path, "w", encoding="utf-8") as ferr:
-                process = subprocess.Popen(
-                    command,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    encoding="utf-8"
-                )
-                stdout_chunks = []
-                stderr_chunks = []
-                # Read and write output in real time
-                while True:
-                    out = process.stdout.readline() if process.stdout else ''
-                    err = process.stderr.readline() if process.stderr else ''
-                    if out:
-                        fout.write(out)
-                        fout.flush()
-                        stdout_chunks.append(out)
-                    if err:
-                        ferr.write(err)
-                        ferr.flush()
-                        stderr_chunks.append(err)
-                    if not out and not err and process.poll() is not None:
-                        break
-                # Read any remaining output
-                if process.stdout:
-                    for out in process.stdout:
-                        fout.write(out)
-                        fout.flush()
-                        stdout_chunks.append(out)
-                if process.stderr:
-                    for err in process.stderr:
-                        ferr.write(err)
-                        ferr.flush()
-                        stderr_chunks.append(err)
-                process.wait()
-                if process.returncode != 0:
-                    raise subprocess.CalledProcessError(
-                        process.returncode, command, output=''.join(stdout_chunks), stderr=''.join(stderr_chunks)
-                    )
-                stdout_content = ''.join(stdout_chunks)
-                stderr_content = ''.join(stderr_chunks)
-                return self._parse_result(stdout_content, stderr_content)
+            print("shell_command", shell_command)
+            proc = subprocess.run(
+                shell_command,
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding='utf-8',
+                executable="/bin/bash"
+            )
+            return self._parse_result(proc.stdout, proc.stderr)
 
         except FileNotFoundError:
             raise FileNotFoundError(
