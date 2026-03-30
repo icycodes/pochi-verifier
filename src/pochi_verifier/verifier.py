@@ -122,6 +122,7 @@ class PochiVerifier:
         shell_command = (
             f"{self.pochi_path} "
             f"--model {model} "
+            f"--agent browser "
             f"--attempt-completion-schema '{schema}' "
             f"--experimental-stream-trajectory {stream_json_path} "
             f"--blobs-dir {blobs_dir_path} "
@@ -204,11 +205,13 @@ class PochiVerifier:
     def _create_prompt(self, reason: str, truth: str) -> str:
         """Creates the prompt for the pochi CLI for browser verification."""
         
-        return f"""You are a software tester assigned to verify a test case using the "browser" agent.
+        return f"""You are a software tester assigned to verify a test case using the agent browser.
 
 ## Critical Instructions
-- You **must** use the "browser" agent to perform all verification steps.  
-- **Do NOT** attempt to start new processes or execute commands to open ports. If the verification steps reference a URL or port that cannot be accessed, immediately return a `"fail"` status.
+- You **must** use the agent browser to perform all verification steps.  
+- **Do NOT** attempt to execute any system commands, scripts, or actions that start, open, terminate, or kill any process or service (including but not limited to starting servers, opening ports, killing background jobs).
+- **Do NOT** attempt to access, open, or modify network ports through any means, including indirect methods (such as running programs that bind to ports).
+- If the verification steps reference a URL or port that cannot be accessed via the agent browser, immediately return a `"fail"` status.
 - If you encounter any verification step that you cannot execute, or are unsure how to proceed at any point, immediately return a `"fail"` status.  
   - For example: If you see a login page but no login step exists in the instructions, stop and return `"fail"`.
 
