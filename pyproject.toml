@@ -1,6 +1,6 @@
 [project]
 name = "pochi-verifier"
-version = "0.1.6"
+version = "0.1.7"
 description = "A library that runs the Pochi CLI for verification tasks."
 readme = "README.md"
 authors = [
