@@ -122,7 +122,6 @@ class PochiVerifier:
         shell_command = (
             f"{self.pochi_path} "
             f"--model {model} "
-            f"--agent browser "
             f"--attempt-completion-schema '{schema}' "
             f"--experimental-stream-trajectory {stream_json_path} "
             f"--blobs-dir {blobs_dir_path} "
