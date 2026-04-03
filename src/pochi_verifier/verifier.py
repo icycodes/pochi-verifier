@@ -51,6 +51,51 @@ class PochiVerifier:
         self._has_browser_agent = self._check_browser_agent()
         if not self._has_browser_agent:
             print("Warning: 'agent-browser' not found. Browser verification will not be available.")
+        self._agent_file_path = self._create_agent_file()
+
+    def __del__(self):
+        """Cleans up the agent file."""
+        if os.path.exists(self._agent_file_path):
+            os.remove(self._agent_file_path)
+
+    def _create_agent_file(self) -> str:
+        """Creates the agent file with critical instructions."""
+        agent_dir = os.path.join(os.getcwd(), ".pochi", "agents")
+        os.makedirs(agent_dir, exist_ok=True)
+        agent_file_path = os.path.join(agent_dir, "pochi_verifier.md")
+
+        instructions = """---
+name: pochi_verifier
+description: A software tester agent for browser-based verification.
+tools: [newTask, attemptCompletion]
+---
+## Role
+You are a software tester responsible for verifying test cases using a browser-based agent.
+
+## Instructions
+1.  You **must** use the `newTask` tool to create a `browser` sub-agent to perform all verification steps.
+2.  The `prompt` for the `newTask` tool should contain the "Reason for this test" and the "Verification Steps".
+3.  The `prompt` for the `newTask` tool **must** contain all the `Rules` below.
+4.  After the sub-agent completes its task, you **must** call the `attemptCompletion` tool with the final status and a detailed reason.
+
+## Rules
+- **Do NOT** attempt to execute any system commands, scripts, or actions that start, open, terminate, or kill any process or service. This includes, but is not limited to, starting servers, opening ports, or killing background jobs.
+- **Do NOT** attempt to access, open, or modify network ports through any means, including indirect methods such as running programs that bind to ports.
+- If the verification steps reference a URL or port that cannot be accessed via the agent browser, you must stop and immediately return a `"fail"` status. For example, this can happen if the agent-browser returns `net::ERR_CONNECTION_REFUSED`, which could indicate that a required server is not running or a previous command has caused it to crash.
+- If you encounter any verification step that you cannot execute, or if you are unsure how to proceed at any point, you must stop and immediately return a `"fail"` status. For instance, if you encounter a login page but the instructions do not include a login step, you should stop and return a `"fail"` status.
+
+## Result Format
+Call the `attemptCompletion` tool with a JSON object matching this schema:
+```json
+{
+    "status": "pass" | "fail",
+    "reason": "A detailed explanation describing why the test passed or failed."
+}
+```
+"""
+        with open(agent_file_path, "w", encoding="utf-8") as f:
+            f.write(instructions)
+        return agent_file_path
 
     def _check_browser_agent(self) -> bool:
         """Checks if the browser agent is available."""
@@ -122,6 +167,7 @@ class PochiVerifier:
         shell_command = (
             f"{self.pochi_path} "
             f"--model {model} "
+            f"--agent pochi_verifier "
             f"--attempt-completion-schema '{schema}' "
             f"--experimental-stream-trajectory {stream_json_path} "
             f"--blobs-dir {blobs_dir_path} "
@@ -204,27 +250,11 @@ class PochiVerifier:
     def _create_prompt(self, reason: str, truth: str) -> str:
         """Creates the prompt for the pochi CLI for browser verification."""
         
-        return f"""You are a software tester assigned to verify a test case using the agent browser.
-
-## Critical Instructions
-- You **must** use the agent browser to perform all verification steps.  
-- **Do NOT** attempt to execute any system commands, scripts, or actions that start, open, terminate, or kill any process or service (including but not limited to starting servers, opening ports, killing background jobs).
-- **Do NOT** attempt to access, open, or modify network ports through any means, including indirect methods (such as running programs that bind to ports).
-- If the verification steps reference a URL or port that cannot be accessed via the agent browser, immediately return a `"fail"` status.
-- If you encounter any verification step that you cannot execute, or are unsure how to proceed at any point, immediately return a `"fail"` status.  
-  - For example: If you see a login page but no login step exists in the instructions, stop and return `"fail"`.
-
+        return f"""
 ## Reason for this test
 {reason}
 
 ## Verification Steps
 Follow these steps precisely and in order:
 {truth}
-
-## Result Format
-At the end of the test, respond with the following JSON:
-{{
-    "status": "pass" | "fail",
-    "reason": "A detailed explanation describing why the test passed or failed."
-}}
 """
