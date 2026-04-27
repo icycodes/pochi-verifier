@@ -11,6 +11,3 @@ wheels/
 
 # Test trajectories
 /tests/integration/trajectories/
-
-# Pochi
-.pochi
