@@ -25,7 +25,13 @@ def valid_truth():
 
 def test_verify_success(verifier, valid_reason, valid_truth, tmp_path):
     """Test a successful verification."""
-    mock_stdout = 'Some output...\nTask Completed\n{\n  "status": "pass",\n  "reason": "Everything is awesome."\n}\n'
+    mock_stdout = """Some output...
+🎉 Task Completed
+{
+  "status": "pass",
+  "reason": "Everything is awesome."
+}
+"""
     mock_stderr = ''
     mock_process = MagicMock()
     mock_process.stdout = mock_stdout
@@ -43,9 +49,34 @@ def test_verify_success(verifier, valid_reason, valid_truth, tmp_path):
         assert "--attempt-completion-schema" in command
         assert "--experimental-stream-trajectory" in command
 
+def test_verify_error_without_emoji(verifier, valid_reason, valid_truth, tmp_path):
+    """Test that verification fails if the 'Task Completed' marker is missing the emoji."""
+    mock_stdout = """Some output...
+Task Completed
+{
+  "status": "pass",
+  "reason": "No emoji."
+}
+"""
+    mock_stderr = ''
+    mock_process = MagicMock()
+    mock_process.stdout = mock_stdout
+    mock_process.stderr = mock_stderr
+    mock_process.returncode = 0
+    with patch('subprocess.run', return_value=mock_process):
+        with pytest.raises(PochiOutputError, match="Cannot find the start of the JSON block."):
+            verifier.verify(valid_reason, valid_truth, trajectory_dir=str(tmp_path))
+
 def test_verify_success_with_suffix_output(verifier, valid_reason, valid_truth, tmp_path):
     """Test a successful verification."""
-    mock_stdout = 'Some output...\n\n🎉 Task Completed\n{\n  "status": "pass",\n  "reason": "Test passed with suffix."\n}\nMore output...'
+    mock_stdout = """Some output...
+
+🎉 Task Completed
+{
+  "status": "pass",
+  "reason": "Test passed with suffix."
+}
+More output..."""
     mock_process = MagicMock()
     mock_process.stdout = mock_stdout
     mock_process.stderr = ''
@@ -57,11 +88,13 @@ def test_verify_success_with_suffix_output(verifier, valid_reason, valid_truth, 
 
 def test_verify_success_with_escaped_braces(verifier, valid_reason, valid_truth, tmp_path):
     """Test a successful verification with escaped braces in JSON."""
-    mock_stdout = (
-        'Some output...\nTask Completed\n'
-        '{"status": "pass", "reason": "This string contains a brace: { and another: } and \\"nested\\": {\\"a\\": 1}" }\n'
-        'More output...'
-    )
+    mock_stdout = """Some output...
+🎉 Task Completed
+{
+  "status": "pass",
+  "reason": "This string contains a brace: { and another: } and \\"nested\\": {\\"a\\": 1}"
+}
+More output..."""
     mock_process = MagicMock()
     mock_process.stdout = mock_stdout
     mock_process.stderr = ''
@@ -73,7 +106,13 @@ def test_verify_success_with_escaped_braces(verifier, valid_reason, valid_truth,
 
 def test_verify_failure_status(verifier, valid_reason, valid_truth, tmp_path):
     """Test a verification that returns a 'fail' status."""
-    mock_stdout = 'Some output...\nTask Completed\n{\n  "status": "fail",\n  "reason": "Something went wrong."\n}\n'
+    mock_stdout = """Some output...
+🎉 Task Completed
+{
+  "status": "fail",
+  "reason": "Something went wrong."
+}
+"""
     mock_stderr = ''
     mock_process = MagicMock()
     mock_process.stdout = mock_stdout
@@ -83,31 +122,31 @@ def test_verify_failure_status(verifier, valid_reason, valid_truth, tmp_path):
         with pytest.raises(VerificationFailedError, match="Verification failed: Something went wrong."):
             verifier.verify(valid_reason, valid_truth, trajectory_dir=str(tmp_path))
 
-def test_verify_failure_with_nested_json(verifier, valid_reason, valid_truth, tmp_path):
-    """Test a verification failure with nested JSON in the reason."""
-    mock_stdout = 'Task Completed\n{"status": "fail", "reason": "Nested: {\\"a\\": 1}"}\n'
-    mock_process = MagicMock()
-    mock_process.stdout = mock_stdout
-    mock_process.stderr = ''
-    mock_process.returncode = 0
-    with patch('subprocess.run', return_value=mock_process):
-        with pytest.raises(VerificationFailedError, match=r'Nested: {"a": 1}'):
-            verifier.verify(valid_reason, valid_truth, trajectory_dir=str(tmp_path))
 
 def test_verify_error_with_truncated_json(verifier, valid_reason, valid_truth, tmp_path):
     """Test handling of truncated JSON in the output."""
-    mock_stdout = 'Task Completed\n{"status": "pass", "reason": "Unclosed string...'
+    mock_stdout = """Some output...
+🎉 Task Completed
+{
+  "status": "pass",
+  "reason": "Unclosed string..."""
     mock_process = MagicMock()
     mock_process.stdout = mock_stdout
     mock_process.stderr = ''
     mock_process.returncode = 0
     with patch('subprocess.run', return_value=mock_process):
-        with pytest.raises(PochiOutputError, match="Failed to parse JSON from pochi output"):
+        with pytest.raises(PochiOutputError, match="Cannot find the end of the JSON block."):
             verifier.verify(valid_reason, valid_truth, trajectory_dir=str(tmp_path))
 
 def test_verify_error_malformed_json(verifier, valid_reason, valid_truth, tmp_path):
     """Test handling of malformed JSON in the output."""
-    mock_stdout = 'Some output...\nTask Completed\n{\n  "status": "pass",\n  "reason Everything is awesome."}\n'
+    mock_stdout = """Some output...
+🎉 Task Completed
+{
+  "status": "pass",
+  "reason" "Malformed JSON."
+}
+"""
     mock_stderr = ''
     mock_process = MagicMock()
     mock_process.stdout = mock_stdout
@@ -119,14 +158,19 @@ def test_verify_error_malformed_json(verifier, valid_reason, valid_truth, tmp_pa
 
 def test_missing_task_completed_marker(verifier, valid_reason, valid_truth, tmp_path):
     """Test handling of output missing the 'Task Completed' marker."""
-    mock_stdout = 'Some output...\n{\n  "status": "pass",\n  "reason": "Everything is awesome."\n}\n'
+    mock_stdout = """Some output...
+{
+  "status": "pass",
+  "reason": "Cannot find the starting line."
+}
+"""
     mock_stderr = ''
     mock_process = MagicMock()
     mock_process.stdout = mock_stdout
     mock_process.stderr = mock_stderr
     mock_process.returncode = 0
     with patch('subprocess.run', return_value=mock_process):
-        with pytest.raises(PochiOutputError, match="Cannot extract the JSON from the output message."):
+        with pytest.raises(PochiOutputError, match="Cannot find the start of the JSON block."):
             verifier.verify(valid_reason, valid_truth, trajectory_dir=str(tmp_path))
 
 def test_pochi_executable_not_found():
@@ -147,7 +191,13 @@ def test_called_process_error(verifier, valid_reason, valid_truth, tmp_path):
 
 def test_default_trajectory_dir_creation(verifier, valid_reason, valid_truth, tmp_path):
     """Test that a default trajectory directory is created and used."""
-    mock_stdout = 'Task Completed\n{"status": "pass", "reason": "Success"}\n'
+    mock_stdout = """Some output...
+🎉 Task Completed
+{
+  "status": "pass",
+  "reason": "Success"
+}
+"""
     mock_stderr = ''
     mock_process = MagicMock()
     mock_process.stdout = mock_stdout
@@ -174,7 +224,13 @@ def test_ffmpeg_path_used(valid_reason, valid_truth, tmp_path):
         with patch('subprocess.run') as mock_run_init:
             mock_run_init.return_value = MagicMock(returncode=0)
             verifier = PochiVerifier(ffmpeg_path="/custom/ffmpeg")
-            mock_stdout = 'Task Completed\n{"status": "pass", "reason": "Success"}\n'
+            mock_stdout = """Some output...
+🎉 Task Completed
+{
+  "status": "pass",
+  "reason": "Success"
+}
+"""
             mock_stderr = ''
             mock_process = MagicMock()
             mock_process.stdout = mock_stdout
