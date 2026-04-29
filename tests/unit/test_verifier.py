@@ -3,7 +3,7 @@ import os
 import pytest
 import subprocess
 from unittest.mock import patch, MagicMock
-from pochi_verifier.verifier import PochiVerifier, VerificationFailedError, PochiOutputError
+from pochi_verifier.verifier import PochiVerifier, PochiOutputError
 
 @pytest.fixture
 def verifier():
@@ -105,7 +105,7 @@ More output..."""
         assert "This string contains a brace: { and another: }" in result.reason
 
 def test_verify_failure_status(verifier, valid_reason, valid_truth, tmp_path):
-    """Test a verification that returns a 'fail' status."""
+    """Test a verification that returns a structured 'fail' result."""
     mock_stdout = """Some output...
 🎉 Task Completed
 {
@@ -119,8 +119,11 @@ def test_verify_failure_status(verifier, valid_reason, valid_truth, tmp_path):
     mock_process.stderr = mock_stderr
     mock_process.returncode = 0
     with patch('subprocess.run', return_value=mock_process):
-        with pytest.raises(VerificationFailedError, match="Verification failed: Something went wrong."):
-            verifier.verify(valid_reason, valid_truth, trajectory_dir=str(tmp_path))
+        result = verifier.verify(valid_reason, valid_truth, trajectory_dir=str(tmp_path))
+        assert result.status == "fail"
+        assert result.reason == "Something went wrong."
+        assert result.stdout == mock_stdout
+        assert result.stderr == mock_stderr
 
 
 def test_verify_error_with_truncated_json(verifier, valid_reason, valid_truth, tmp_path):

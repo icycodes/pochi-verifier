@@ -17,10 +17,6 @@ class VerificationResult:
     stdout: str
     stderr: str
 
-class VerificationFailedError(Exception):
-    """Custom exception for when a verification fails."""
-    pass
-
 class PochiOutputError(Exception):
     """Custom exception for when the output from pochi is malformed."""
     pass
@@ -88,9 +84,9 @@ class PochiVerifier:
 
         Returns:
             VerificationResult: An object containing the verification result.
+                Both passing and failing verifications are returned here.
 
         Raises:
-            VerificationFailedError: If the verification fails.
             ValueError: If the specification is invalid.
             subprocess.CalledProcessError: If the pochi CLI returns a non-zero exit code.
             PochiOutputError: If the output from pochi CLI is malformed.
@@ -207,9 +203,6 @@ class PochiVerifier:
 
         if not status or not reason:
             raise PochiOutputError("The result JSON is missing 'status' or 'reason'.")
-
-        if status == "fail":
-            raise VerificationFailedError(f"Verification failed: {reason}")
 
         return VerificationResult(status=status, reason=reason, stdout=stdout, stderr=stderr)
 
