@@ -42,12 +42,19 @@ with open("path/to/your/verify_todo.json", "r") as f:
 reason = spec["reason"]
 truth = spec["truth"]
 
-result = verifier.verify(
-    reason=reason,
-    truth=truth,
-    use_browser_agent=True,
-    trajectory_dir="path/to/save/trajectory/files"
-)
+try:
+    result = verifier.verify(
+        reason=reason,
+        truth=truth,
+        use_browser_agent=True,
+        trajectory_dir="path/to/save/trajectory/files"
+    )
+except (FileNotFoundError, ValueError) as e:
+    print(f"Configuration error: {e}")
+    raise
+except Exception as e:
+    print(f"Verification could not be completed: {e}")
+    raise
 
 if result.status == "pass":
     print("Verification successful!")
