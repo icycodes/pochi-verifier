@@ -32,26 +32,29 @@ You can then use `pochi-verifier` to run this verification from your Python code
 import json
 from pochi_verifier import PochiVerifier
 
-# Create a verifier instance 
+# Create a verifier instance
 verifier = PochiVerifier()
 
 # Example: Run a verification command
-try:
-    with open("path/to/your/verify_todo.json", "r") as f:
-        spec = json.load(f)
-    reason = spec["reason"]
-    truth = spec["truth"]
-    
-    result = verifier.verify(
-        reason=reason,
-        truth=truth,
-        use_browser_agent=True,
-        trajectory_dir="path/to/save/trajectory/files"
-    )
+with open("path/to/your/verify_todo.json", "r") as f:
+    spec = json.load(f)
+
+reason = spec["reason"]
+truth = spec["truth"]
+
+result = verifier.verify(
+    reason=reason,
+    truth=truth,
+    use_browser_agent=True,
+    trajectory_dir="path/to/save/trajectory/files"
+)
+
+if result.status == "pass":
     print("Verification successful!")
-    print(f"Status: {result.status}")
-    print(f"Reason: {result.reason}")
-except Exception as e:
-    print(f"Verification failed: {e}")
+else:
+    print("Verification failed.")
+
+print(f"Status: {result.status}")
+print(f"Reason: {result.reason}")
 ```
 
