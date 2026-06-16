@@ -1,0 +1,38 @@
+name: Build and Publish Python Package
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    # Permissions required for Trusted Publishing (OIDC)
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          # uv reads the Python version from pyproject.toml (.python-version)
+          python-version-file: ".python-version"
+
+      - name: Build package
+        run: uv build
+
+      # Publish using Trusted Publishing (OIDC)
+      - name: Publish package to PyPI
+        run: uv publish
