@@ -45,7 +45,7 @@ def test_verify_success(verifier, valid_reason, valid_truth, tmp_path):
         command = mock_run.call_args[0][0]
         assert "pochi" in command
         assert "--model" in command
-        assert "google/gemini-3-flash" in command
+        assert "google/gemini-3.5-flash" in command
         assert "--attempt-completion-schema" in command
         assert "--experimental-stream-trajectory" in command
 

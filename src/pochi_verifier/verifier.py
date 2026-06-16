@@ -67,7 +67,7 @@ class PochiVerifier:
         reason: str,
         truth: str,
         use_browser_agent: bool = True,
-        model: str = "google/gemini-3-flash",
+        model: str = "google/gemini-3.5-flash",
         trajectory_dir: Optional[str] = None,
     ) -> VerificationResult:
         """
@@ -209,27 +209,54 @@ class PochiVerifier:
     def _create_prompt(self, reason: str, truth: str) -> str:
         """Creates the prompt for the pochi CLI for browser verification."""
         
-        return f"""You are a software tester assigned to verify a test case using the agent browser.
+        return f"""# System Instructions
+Follow these rules and steps exactly.
 
-## Critical Instructions
-- You **must** use the agent browser to perform all verification steps.  
-- **Do NOT** attempt to execute any system commands, scripts, or actions that start, open, terminate, or kill any process or service (including but not limited to starting servers, opening ports, killing background jobs).
-- **Do NOT** attempt to access, open, or modify network ports through any means, including indirect methods (such as running programs that bind to ports).
-- If the verification steps reference a URL or port that cannot be accessed via the agent browser, immediately return a `"fail"` status.
-- If you encounter any verification step that you cannot execute, or are unsure how to proceed at any point, immediately return a `"fail"` status.  
-  - For example: If you see a login page but no login step exists in the instructions, stop and return `"fail"`.
+## Tool Rules
+You **MUST ONLY** use the following tools; using any other tool is forbidden.
+1. newTask: use the `newTask` tool to create a `browser` sub-agent.
+2. attemptCompletion: use `attemptCompletion` to report the final result in JSON format.
 
-## Reason for this test
-{reason}
+## Steps to Follow
+1. Create a `browser` sub-agent with exactly this prompt:
+    ``````markdown
+    You are a software tester assigned to verify a test case using the agent-browser.
 
-## Verification Steps
-Follow these steps precisely and in order:
-{truth}
+    ## Tool Rules
+    You **MUST ONLY** use the following tools; using any other tool is forbidden. If you encounter a case that requires a tool not listed here, stop and immediately return a `"fail"` status.
+    1. executeCommand: use `executeCommand` to run an `agent-browser` command; running any other command is forbidden.
+    2. readFile: if the command output is truncated, you may use `readFile` to read the saved result file; any other use is forbidden.
+    3. attemptCompletion: use `attemptCompletion` to report the final result in JSON format.
 
-## Result Format
-At the end of the test, respond with the following JSON:
-{{
-    "status": "pass" | "fail",
-    "reason": "A detailed explanation describing why the test passed or failed."
-}}
+    ## Critical Instructions
+    - You **MUST** use the agent-browser to perform all verification steps.
+    - If the verification steps reference a URL or port that is unreachable via the agent-browser (i.e., the agent-browser returns an access error), immediately return a `"fail"` status.
+    - If you encounter any verification step that you cannot execute, or are unsure how to proceed at any point, immediately return a `"fail"` status. For example: if you see a login page but no login step exists in the instructions, stop and return `"fail"`.
+
+    ## Forbidden Actions
+    You **MUST NOT** perform any of the following actions. If you encounter a case that requires any of them, stop and immediately return a `"fail"` status.
+    - **DO NOT** read any files in the workspace, including source files, scripts, or directory listings.
+    - **DO NOT** execute any system commands, scripts, or actions that start, open, terminate, or kill any process or service (including but not limited to starting servers, opening ports, or killing background jobs).
+
+    ## Reason for This Test
+    {reason}
+
+    ## Verification Steps
+    Follow these steps precisely and in order:
+    {truth}
+
+    ## Result Format
+    At the end of the test, respond with the following JSON:
+    {{
+        "status": "pass" | "fail",
+        "reason": "A detailed explanation of why the test passed or failed."
+    }}
+    ``````
+2. Report the result of the `browser` sub-agent in JSON format. If the sub-agent fails or does not return a result, report the status as `fail` and provide the reason.
+    ```json
+    {{
+        "status": "pass" | "fail",
+        "reason": "A detailed explanation of why the test passed or failed."
+    }}
+    ```
 """
