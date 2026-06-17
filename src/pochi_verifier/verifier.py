@@ -133,6 +133,8 @@ class PochiVerifier:
         )
 
         try:
+            env = os.environ.copy()
+            env.setdefault('POCHI_LOG', 'debug')
             proc = subprocess.run(
                 shell_command,
                 shell=True,
@@ -140,7 +142,8 @@ class PochiVerifier:
                 stderr=subprocess.PIPE,
                 text=True,
                 encoding='utf-8',
-                executable="/bin/bash"
+                executable="/bin/bash",
+                env=env
             )
             return self._parse_result(proc.stdout, proc.stderr)
 
