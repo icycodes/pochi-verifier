@@ -21,6 +21,8 @@ class PochiOutputError(Exception):
     """Custom exception for when the output from pochi is malformed."""
     pass
 
+POCHI_MIN_VERSION = (0, 6, 15)
+
 class PochiVerifier:
     """
     A Python wrapper for the pochi CLI.
@@ -44,15 +46,40 @@ class PochiVerifier:
         elif not shutil.which("ffmpeg"):
             print("Warning: ffmpeg not found in PATH. Video recording will not be available.")
 
+        if not self._check_pochi():
+            min_ver = ".".join(str(x) for x in POCHI_MIN_VERSION)
+            raise RuntimeError(
+                f"pochi version >= {min_ver} is required. "
+                "Please upgrade pochi and try again."
+            )
+
         self._has_browser_agent = self._check_browser_agent()
         if not self._has_browser_agent:
             print("Warning: 'agent-browser' not found. Browser verification will not be available.")
+
+    def _check_pochi(self) -> bool:
+        """Checks if the installed pochi version is >= POCHI_MIN_VERSION."""
+        try:
+            result = subprocess.run(
+                [self.pochi_path, "--version"],
+                capture_output=True,
+                text=True,
+                check=True,
+                encoding='utf-8'
+            )
+            match = re.search(r'(\d+\.\d+\.\d+)', result.stdout + result.stderr)
+            if not match:
+                return False
+            version_tuple = tuple(int(x) for x in match.group(1).split('.'))
+            return version_tuple >= POCHI_MIN_VERSION
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return False
 
     def _check_browser_agent(self) -> bool:
         """Checks if the browser agent is available."""
         try:
             subprocess.run(
-                [self.pochi_path, "agent-browser", "--version"],
+                ["agent-browser", "--version"],
                 capture_output=True,
                 text=True,
                 check=True,
@@ -120,6 +147,7 @@ class PochiVerifier:
             f"--model {model} "
             f"--attempt-completion-schema '{schema}' "
             f"--experimental-stream-trajectory {stream_json_path} "
+            f"--experimental-stream-trajectory-strip-duplicates "
             f"--blobs-dir {blobs_dir_path} "
         )
         if self.ffmpeg_path:
